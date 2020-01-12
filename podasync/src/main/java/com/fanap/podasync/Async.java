@@ -41,11 +41,13 @@ import static com.neovisionaries.ws.client.WebSocketState.OPEN;
  */
 public class Async {
 
+    long currentTime = 0;
+
     private WebSocket webSocket;
     private static final int SOCKET_CLOSE_TIMEOUT = 110000;
     private WebSocket webSocketReconnect;
     private static final String TAG = "Async" + " ";
-    private static Async instance;
+    private static volatile Async instance;
     private boolean isServerRegister;
     private boolean rawLog;
     private boolean isDeviceRegister;
@@ -72,7 +74,7 @@ public class Async {
     private String serverName;
     private String ssoHost;
     private int retryStep = 1;
-    private boolean reconnectOnClose = true;
+    private boolean reconnectOnClose = false;
     private boolean log;
     private long connectionCheckTimeout = 10000;
     private long JSTimeLatency = 100;
@@ -475,6 +477,12 @@ public class Async {
         return this;
     }
 
+    public Async setListener(AsyncListener listener) {
+        asyncListenerManager.clearListeners();
+        asyncListenerManager.addListener(listener, log);
+        return this;
+    }
+
     public Async addListeners(List<AsyncListener> listeners) {
         asyncListenerManager.addListeners(listeners);
         return this;
@@ -629,6 +637,11 @@ public class Async {
         }
     }
 
+
+    public boolean isServerRegister() {
+        return isServerRegister;
+    }
+
     private void handleOnMessageAckNeeded(WebSocket websocket, ClientMessage clientMessage) {
 
         try {
@@ -636,7 +649,7 @@ public class Async {
                 handleOnMessage(clientMessage);
 
                 Message messageSenderAckNeeded = new Message();
-                messageSenderAckNeeded.setMessageId(clientMessage.getSenderMessageId());
+                messageSenderAckNeeded.setMessageId(clientMessage.getId());
 
                 String jsonSenderAckNeeded = gson.toJson(messageSenderAckNeeded);
                 String jsonSenderAckNeededWrapper = getMessageWrapper(jsonSenderAckNeeded, AsyncMessageType.MessageType.ACK);
@@ -780,7 +793,7 @@ public class Async {
      * After a delay Time it calls the method in the Run
      */
     private void scheduleCloseSocket() {
-        long currentTime = new Date().getTime();
+        currentTime = new Date().getTime();
         socketCloseHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
@@ -800,7 +813,7 @@ public class Async {
      * We set {@param type = 0} with empty content.
      */
 
-    private void stopSocket() {
+    public void stopSocket() {
         try {
             if (webSocket != null) {
                 isServerRegister = false;
