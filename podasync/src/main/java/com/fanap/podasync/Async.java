@@ -33,8 +33,6 @@ import java.util.Map;
 
 import javax.net.ssl.SSLSocketFactory;
 
-import static com.neovisionaries.ws.client.WebSocketState.OPEN;
-
 /*
  * By default WebSocketFactory uses for non-secure WebSocket connections (ws:)
  * and for secure WebSocket connections (wss:).
@@ -185,8 +183,8 @@ public class Async {
 
             @Override
             public void onCloseFrame(WebSocket websocket, WebSocketFrame frame) throws Exception {
-                if (log) Log.i(TAG, "onCloseFrame");
-                if (log) Log.i(TAG, frame.getCloseReason());
+                showLog("onCloseFrame");
+                showLog(frame.getCloseReason());
             }
 
             @Override
@@ -442,7 +440,7 @@ public class Async {
 
             String json1 = gson.toJson(messageWrapperVo);
             sendData(webSocket, json1);
-            if (log) Log.i(TAG, "Send message");
+            showLog("Send message");
 
         } catch (Exception e) {
             asyncListenerManager.callOnError(e.getCause().getMessage());
@@ -524,21 +522,20 @@ public class Async {
             String newPeerId = clientMessage.getContent();
             if (!peerIdExistence()) {
                 savePeerId(newPeerId);
+                showLog("Peer id doesn't exist");
+
             }
 
             if (newPeerId.equals(peerId)) {
 
-                if (log) Log.i(TAG, "SERVER_IS_ALREADY_REGISTERED");
-                if (log) Log.i("ASYNC_IS_READY", "");
+                showLog("PEER ids are equal");
+                showLog("SERVER_ALREADY_REGISTERED");
+                showLog("ASYNC_IS_READY");
 
                 callAsyncReady();
-//                if (websocket.getState() == OPEN) {
-//                    if (websocket.getFrameQueueSize() > 0) {
-//
-//                    }
-//
 
             } else {
+                savePeerId(newPeerId);
                 serverRegister(websocket);
             }
         } catch (Exception e) {
@@ -550,6 +547,7 @@ public class Async {
     private void serverRegister(WebSocket websocket) {
         if (websocket != null) {
             try {
+                showLog("SEND_SERVER_REGISTER");
                 RegistrationRequest registrationRequest = new RegistrationRequest();
                 registrationRequest.setName(getServerName());
 
@@ -617,7 +615,7 @@ public class Async {
                 }
                 deviceRegister(webSocket);
             } else {
-                if (log) Log.i(TAG, "ASYNC_PING_RECEIVED");
+                showLog("ASYNC_PING_RECEIVED");
             }
         } catch (Exception e) {
             if (log) Log.e(TAG, e.getCause().getMessage());
@@ -629,8 +627,9 @@ public class Async {
      * */
     private void handleOnServerRegister(String textMessage) {
         try {
-            if (log) Log.i(TAG, "SERVER_REGISTERED");
-            if (log) Log.i("ASYNC_IS_READY", textMessage);
+            showLog("SERVER_REGISTERED");
+            showLog("ASYNC_IS_READY");
+            showLog(textMessage);
 
             callAsyncReady();
         } catch (Exception e) {
@@ -687,7 +686,7 @@ public class Async {
                 String peerMessageJson = gson.toJson(peerInfo);
                 String jsonPeerInfoWrapper = getMessageWrapper(peerMessageJson, AsyncMessageType.MessageType.DEVICE_REGISTER);
                 sendData(websocket, jsonPeerInfoWrapper);
-                if (log) Log.i(TAG, "SEND_SERVER_REGISTER");
+                showLog("SEND_DEVICE_REGISTER");
                 if (log) Log.d(TAG, jsonPeerInfoWrapper);
 
             } else {
@@ -741,7 +740,7 @@ public class Async {
                         } catch (Exception e) {
                             if (log) Log.e(TAG, e.getMessage());
                         }
-                        if (log) Log.i(TAG, "SEND_ASYNC_PING");
+                        showLog("SEND_ASYNC_PING");
                     } else {
                         if (log) Log.e(TAG + "Socket Is", "Closed");
                     }
@@ -829,7 +828,7 @@ public class Async {
                 webSocket.disconnect();
                 webSocket = null;
                 pingHandler.removeCallbacksAndMessages(null);
-                if (log) Log.i(TAG, "Socket Stopped");
+                showLog("Socket Stopped");
             }
         } catch (Exception e) {
             if (log) Log.e(TAG, e.getMessage());
@@ -851,9 +850,15 @@ public class Async {
      * Save peerId in the SharedPreferences
      */
     private void savePeerId(String peerId) {
+        showLog("Saving new peer id: " + peerId);
+
         SharedPreferences.Editor editor = sharedPrefs.edit();
         editor.putString(AsyncConstant.Constants.PEER_ID, peerId);
         editor.apply();
+    }
+
+    private void showLog(String message) {
+        if (log) Log.i(Async.TAG, message);
     }
 
     //Save deviceId in the SharedPreferences
