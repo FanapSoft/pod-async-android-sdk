@@ -521,17 +521,22 @@ public class Async {
     private void handleOnDeviceRegister(WebSocket websocket, ClientMessage clientMessage) {
         try {
             isDeviceRegister = true;
+            String newPeerId = clientMessage.getContent();
             if (!peerIdExistence()) {
-                String peerId = clientMessage.getContent();
-                savePeerId(peerId);
+                savePeerId(newPeerId);
             }
 
-            if (isServerRegister && peerId.equals(getPeerId())) {
-                if (websocket.getState() == OPEN) {
-                    if (websocket.getFrameQueueSize() > 0) {
+            if (newPeerId.equals(peerId)) {
 
-                    }
-                }
+                if (log) Log.i(TAG, "SERVER_IS_ALREADY_REGISTERED");
+                if (log) Log.i("ASYNC_IS_READY", "");
+
+                callAsyncReady();
+//                if (websocket.getState() == OPEN) {
+//                    if (websocket.getFrameQueueSize() > 0) {
+//
+//                    }
+//
 
             } else {
                 serverRegister(websocket);
@@ -627,13 +632,17 @@ public class Async {
             if (log) Log.i(TAG, "SERVER_REGISTERED");
             if (log) Log.i("ASYNC_IS_READY", textMessage);
 
-            asyncListenerManager.callOnStateChanged("ASYNC_READY");
-            for (String message : asyncQueue) {
-                sendData(webSocket, message);
-            }
-            isServerRegister = true;
+            callAsyncReady();
         } catch (Exception e) {
             if (log) Log.e(TAG, e.getCause().getMessage());
+        }
+    }
+
+    private void callAsyncReady() {
+        isServerRegister = true;
+        asyncListenerManager.callOnStateChanged("ASYNC_READY");
+        for (String message : asyncQueue) {
+            sendData(webSocket, message);
         }
     }
 

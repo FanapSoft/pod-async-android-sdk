@@ -18,7 +18,7 @@ public class AsyncActivity extends AppCompatActivity implements SocketContract.v
     //("ws://172.16.110.235:8003/ws", "UIAPP")
 //    @Inject
     SocketPresenter socketPresenter;
-    private static final String SOCKET_SERVER = "ws://172.16.110.235:8003/ws";
+    private static final String SOCKET_SERVER = " ";
     private Button connectButton;
     private TextView textViewState;
     private Button getStateButton;
@@ -86,8 +86,8 @@ public class AsyncActivity extends AppCompatActivity implements SocketContract.v
         connectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                socketPresenter.connect("ws://172.16.106.26:8003/ws", "POD-Chat", "chat-server",
-                        "afa51d8291dc4072a0831d3a18cb5030", "http://172.16.110.76", "879765786gnkjSina");
+                socketPresenter.connect(" ", "POD-Chat", "chat-server",
+                        " ", " ", " ");
             }
         });
 
