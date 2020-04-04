@@ -4,52 +4,23 @@
 
 # Changelog
 All notable changes to this project will be documented here.
-##  Version [0.3.1.2] 28-11-2018
-- In the `getHistory` function  lastMessageId and firstMessageIs is going to deprecate 
-- [BugFixed]  Listener of `LeaveThread`
-- [BugFixed]  NullpointerException on `ForwardMessage`
-- [BugFixed]  Exception on `DeleteMessage`
-- [BugFixed]  Update contact 
-- [BugFixed]  Remove contact 
-- The default of the `typeCode` has been set to "default".
+
+
+##  Version [0.2.8.3] 4-4-2020
+
+-   [BugFix] ACK message bug
+
+-   [Improvement] peerId existence scenario  
+
+
+
+
 
 ##  Version [0.1.3.3] 28-11-2018
-minor `BugFixed`
-**improvement**  Connection state
--   [Changed] response model of the `onCreateThread`
--   [Changed] response model of the `OnAddContact`
--   [Added] Message Type to `Send text message`
--   [Added] Message Type to `Send file message`
--   [Added] `Type Code` in `connect`  and in the future release you will be able to set this atribute separately in all the methods too. 
-
--   [Added] `SeenMessageList`
--   [Added] `DeliveredMessageList`
--   [Added] `getThreadsWithCoreUserId`
--   [Added] `CreateThreadWithMessage` 
+    
+    minor `BugFixed`
 
 
-
-##  Version [0.1.3.2] 20-11-2018
--   [Changed] response model of `leaveThread`.
--   [Changed]  model of `ReplyInfo` :
-
-```java
-{
-ReplyInfoVO {
-    private Participant participant;
-    private long repliedToMessageId;
-    private String repliedToMessage;
-    private long messageType;
-    private boolean deleted;
-    private String systemMetadata;
-    private String metadata;
-    private String message;
-}
-
-```
--   [Changed] response model of `RemoveParticipant`
--   [Added] rerty for geting user info when the response is getting late
--   [Added] listener in `uploadImageFileMessage` when exception happens
 
 ##  Version [0.1.3.1] 14-11-2018
 -   [Changed]  response model of the `uploadImage`
@@ -116,4 +87,3 @@ ReplyInfoVO {
 -   Add Permission Class for request permission and check permission
 -   Add FileServer param to Connect 
 
-## Version [0.6.6.0] - 2018-07-18
