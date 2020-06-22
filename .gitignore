@@ -63,3 +63,5 @@ captures/
 
 # Google Services (e.g. APIs or Firebase)
 google-services.json
+/podasync/src/main/res/values/configs.xml
+/app/src/main/res/values/configs.xml

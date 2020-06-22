@@ -41,8 +41,8 @@ public class AsyncSandBoxActivity extends AppCompatActivity implements SocketCon
         connectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                socketPresenter.connect("ws://chat-sandbox.pod.land/ws", "POD-Chat", "chat-server",
-                        TOKEN, "https://sandbox.pod.land:8043/srv/basic-platform/", "ksf98jhsdf5784");
+                socketPresenter.connect("", "", "",
+                        TOKEN, "", "");
 
             }
         });

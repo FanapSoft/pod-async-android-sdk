@@ -2,6 +2,7 @@ package com.fanap.podasync;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.annotation.NonNull;
@@ -26,6 +27,9 @@ import com.neovisionaries.ws.client.WebSocketListener;
 import com.neovisionaries.ws.client.WebSocketState;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -379,8 +383,26 @@ public class Async {
             setToken(token);
             setServerName(serverName);
             setSsoHost(ssoHost);
+
+            String sName = Uri.parse(socketServerAddress).getHost();
+
+            webSocketFactory.setServerName(sName);
+
             webSocket = webSocketFactory
                     .createSocket(socketServerAddress);
+
+            Socket socket = webSocket.getSocket();
+
+            Log.d(TAG, "Enabling SNI for " + sName);
+
+            try {
+                Method method = socket.getClass().getMethod("setHostname", String.class);
+                method.invoke(socket, sName);
+            } catch (Exception e) {
+                Log.w(TAG, "SNI Failed", e);
+            }
+
+
             onEvent(webSocket);
 
             webSocket.setMaxPayloadSize(100);
@@ -388,7 +410,6 @@ public class Async {
             webSocket.connectAsynchronously();
 
             if (deviceID != null && !deviceID.isEmpty()) {
-//                saveDeviceId(deviceID);
                 setDeviceID(deviceID);
             }
 
