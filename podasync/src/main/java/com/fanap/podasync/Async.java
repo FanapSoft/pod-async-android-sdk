@@ -3,6 +3,7 @@ package com.fanap.podasync;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.annotation.NonNull;
@@ -391,19 +392,23 @@ public class Async {
             webSocket = webSocketFactory
                     .createSocket(socketServerAddress);
 
-            Socket socket = webSocket.getSocket();
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.LOLLIPOP){
 
-            Log.d(TAG, "Enabling SNI for " + sName);
+                Socket socket = webSocket.getSocket();
 
-            try {
-                Method method = socket.getClass().getMethod("setHostname", String.class);
-                method.invoke(socket, sName);
-            } catch (Exception e) {
-                Log.w(TAG, "SNI Failed", e);
+                Log.d(TAG, "Enabling SNI for " + sName);
+
+                try {
+                    Method method = socket.getClass().getMethod("setHostname", String.class);
+                    method.invoke(socket, sName);
+                } catch (Exception e) {
+                    Log.w(TAG, "SNI Failed", e);
+                }
+
             }
 
 
-            onEvent(webSocket);
+                onEvent(webSocket);
 
             webSocket.setMaxPayloadSize(100);
             webSocket.addExtension(WebSocketExtension.PERMESSAGE_DEFLATE);
