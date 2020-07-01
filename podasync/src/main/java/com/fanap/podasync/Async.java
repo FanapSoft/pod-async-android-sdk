@@ -392,7 +392,7 @@ public class Async {
             webSocket = webSocketFactory
                     .createSocket(socketServerAddress);
 
-            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.LOLLIPOP){
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M){
 
                 Socket socket = webSocket.getSocket();
 
