@@ -5,7 +5,7 @@ apply plugin: 'com.github.dcendents.android-maven'
 
 ext{
 
-    libraryVersion = '0.2.11.0'
+    libraryVersion = '0.2.13.3'
 }
 
 android {
@@ -13,7 +13,7 @@ android {
     defaultConfig {
         minSdkVersion 17
         targetSdkVersion 28
-        versionCode 16
+        versionCode 21
         versionName libraryVersion
 
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
@@ -58,6 +58,10 @@ dependencies {
 
     //Web Socket
     implementation 'com.neovisionaries:nv-websocket-client:2.10'
+
+    //log
+    implementation 'io.sentry:sentry-android:2.0.0'
+
 
     //Gson
     implementation 'com.google.code.gson:gson:2.8.2'

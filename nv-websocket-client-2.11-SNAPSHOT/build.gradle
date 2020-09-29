@@ -1,2 +1,0 @@
-configurations.maybeCreate("default")
-artifacts.add("default", file('nv-websocket-client-2.11-SNAPSHOT.jar'))
