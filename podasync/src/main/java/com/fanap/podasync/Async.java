@@ -37,6 +37,8 @@ import java.util.Map;
 
 import javax.net.ssl.SSLSocketFactory;
 
+import io.sentry.android.core.SentryAndroid;
+import io.sentry.android.core.SentryAndroidOptions;
 import io.sentry.core.Breadcrumb;
 import io.sentry.core.EventProcessor;
 import io.sentry.core.Hub;
@@ -92,9 +94,7 @@ public class Async {
     private boolean log;
     private long connectionCheckTimeout = 10000;
     private long JSTimeLatency = 100;
-
-    private static Hub sentryHub;
-    private static Scope sentryScope;
+    private static boolean overrideSentry;
 
 
     private Async() {
@@ -106,7 +106,18 @@ public class Async {
             sharedPrefs = context.getSharedPreferences(AsyncConstant.Constants.PREFERENCE, Context.MODE_PRIVATE);
             instance = new Async();
 
-            setupSentry(context);
+        }
+        return instance;
+    }
+
+    public static Async getInstance(Context context, boolean overrideSentry) {
+        if (instance == null) {
+            sharedPrefs = context.getSharedPreferences(AsyncConstant.Constants.PREFERENCE, Context.MODE_PRIVATE);
+            instance = new Async();
+
+            if (overrideSentry) {
+                setupSentry(context);
+            }
 
         }
         return instance;
@@ -114,26 +125,16 @@ public class Async {
 
     private static void setupSentry(Context context) {
 
+        overrideSentry = true;
 
-        SentryOptions options = new SentryOptions();
-        options.setDsn(context.getApplicationContext().getString(R.string.async_sentry_dsn));
-        options.setCacheDirPath(context.getCacheDir().getAbsolutePath());
-        options.setSentryClientName("PodAsync-Android");
-        options.addInAppInclude("com.fanap.podasync");
-        options.setEnvironment("PODASYNC");
-
-        sentryHub = new Hub(options);
-        sentryScope = new Scope(options);
-        sentryHub.setTag("SDK", "PODASYNC");
-
-//        SentryAndroid.init(context.getApplicationContext(),
-//                options -> {
-//                    options.setDsn(context.getApplicationContext().getString(R.string.async_sentry_dsn));
-//                    options.setCacheDirPath(context.getCacheDir().getAbsolutePath());
-//                    options.setSentryClientName("PodAsync-Android");
-//                    options.addInAppInclude("com.fanap.podasync");
-//                    options.setEnvironment("PODASYNC");
-//                });
+        SentryAndroid.init(context.getApplicationContext(),
+                options -> {
+                    options.setDsn(context.getApplicationContext().getString(R.string.async_sentry_dsn));
+                    options.setCacheDirPath(context.getCacheDir().getAbsolutePath());
+                    options.setSentryClientName("PodAsync-Android");
+                    options.addInAppInclude("com.fanap.podasync");
+                    options.setEnvironment("PODASYNC");
+                });
 
 
     }
@@ -388,12 +389,13 @@ public class Async {
 
 
         Breadcrumb c = new Breadcrumb();
-        c.setCategory("LOG");
-        c.setData("MESSAGE", message);
+        c.setCategory("INFO");
+        c.setData("DATA", message);
         c.setLevel(SentryLevel.INFO);
         c.setMessage(message);
         c.setType("INFO LOG");
-        sentryHub.addBreadcrumb(c, "NORMAL_INFO_WITHOUT_DATA");
+        if (Sentry.isEnabled())
+            Sentry.addBreadcrumb(c, "NORMAL_INFO_WITHOUT_DATA");
 
         showLog(message);
     }
@@ -402,12 +404,13 @@ public class Async {
 
 
         Breadcrumb c = new Breadcrumb();
-        c.setCategory("LOG");
+        c.setCategory("INFO");
         c.setData("DATA", data);
         c.setLevel(SentryLevel.INFO);
         c.setMessage(info);
         c.setType("DATA LOG");
-        sentryHub.addBreadcrumb(c, "NORMAL_INFO");
+        if (Sentry.isEnabled())
+        Sentry.addBreadcrumb(c, "NORMAL_INFO");
 
 
         showLog(info);
@@ -417,7 +420,14 @@ public class Async {
 
     private void captureError(String hint, Exception cause) {
 
-        sentryHub.captureException(cause, hint);
+
+        SentryEvent event = new SentryEvent(cause);
+        event.setEnvironment("PODASYNC");
+        event.setLevel(SentryLevel.ERROR);
+        event.setTag("FROM_SDK", "PODASYNC");
+        event.setExtra("FROM_SDK", "PODASYNC");
+        if (Sentry.isEnabled())
+        Sentry.captureEvent(event, hint);
 
         showErrorLog(hint);
         showErrorLog(cause.getMessage());
@@ -426,10 +436,18 @@ public class Async {
 
     private void captureError(String hint, String cause) {
 
-        sentryHub.captureException(new Exception(cause), hint);
+        SentryEvent event = new SentryEvent(new Exception(cause));
+        event.setEnvironment("PODASYNC");
+        event.setLevel(SentryLevel.ERROR);
+        event.setTag("FROM_SDK", "PODASYNC");
+        event.setExtra("FROM_SDK", "PODASYNC");
+        if (Sentry.isEnabled())
+        Sentry.captureEvent(event, hint);
+
 
         showErrorLog(hint);
         showErrorLog(cause);
+
 
     }
 
@@ -532,12 +550,15 @@ public class Async {
     }
 
     private void fillInitialSentry(String socketServerAddress, String appId, String serverName, String token, String ssoHost, String deviceID) {
-        sentryHub.setExtra("appId", appId);
-        sentryHub.setExtra("socketServerAddress", socketServerAddress);
-        sentryHub.setExtra("serverName", serverName);
-        sentryHub.setExtra("token", token);
-        sentryHub.setExtra("ssoHost", ssoHost);
-        sentryHub.setExtra("deviceID", deviceID);
+
+        if (Sentry.isEnabled()) {
+            Sentry.setExtra("appId", appId);
+            Sentry.setExtra("socketServerAddress", socketServerAddress);
+            Sentry.setExtra("serverName", serverName);
+            Sentry.setExtra("token", token);
+            Sentry.setExtra("ssoHost", ssoHost);
+            Sentry.setExtra("deviceID", deviceID);
+        }
     }
 
     /**
@@ -721,7 +742,8 @@ public class Async {
                 } else {
                     asyncListenerManager.callOnError("Socket is close");
                     asyncQueue.add(jsonMessageWrapperVo);
-                    captureError("SEND DATA", "Socket is close (added to queue");
+                    captureError("SEND DATA", "Socket is close");
+                    captureMessage("Add to queue", jsonMessageWrapperVo);
                 }
 
             } else {
@@ -769,7 +791,7 @@ public class Async {
     }
 
     private void addSentryExtra(String key, String value) {
-        sentryHub.setExtra(key, value);
+        Sentry.setExtra(key, value);
     }
 
     /*

@@ -14,7 +14,7 @@ public class SocketPresenter extends AsyncAdapter implements SocketContract.pres
 
     public SocketPresenter(SocketContract.view view, Context context) {
         this.view = view;
-        async = Async.getInstance(context);
+        async = Async.getInstance(context,true);
         async.isLoggable(true);
         async.rawLog(true);
         async.addListener(this);
