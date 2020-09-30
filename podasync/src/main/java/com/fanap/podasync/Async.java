@@ -3,6 +3,7 @@ package com.fanap.podasync;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.annotation.NonNull;
@@ -27,7 +28,6 @@ import com.neovisionaries.ws.client.WebSocketListener;
 import com.neovisionaries.ws.client.WebSocketState;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -36,6 +36,20 @@ import java.util.List;
 import java.util.Map;
 
 import javax.net.ssl.SSLSocketFactory;
+
+import io.sentry.android.core.SentryAndroid;
+import io.sentry.android.core.SentryAndroidOptions;
+import io.sentry.core.Breadcrumb;
+import io.sentry.core.EventProcessor;
+import io.sentry.core.Hub;
+import io.sentry.core.Scope;
+import io.sentry.core.ScopeCallback;
+import io.sentry.core.Sentry;
+import io.sentry.core.SentryClient;
+import io.sentry.core.SentryEvent;
+import io.sentry.core.SentryLevel;
+import io.sentry.core.SentryOptions;
+import io.sentry.core.protocol.SentryId;
 
 /*
  * By default WebSocketFactory uses for non-secure WebSocket connections (ws:)
@@ -80,6 +94,7 @@ public class Async {
     private boolean log;
     private long connectionCheckTimeout = 10000;
     private long JSTimeLatency = 100;
+    private static boolean overrideSentry;
 
 
     private Async() {
@@ -90,8 +105,38 @@ public class Async {
         if (instance == null) {
             sharedPrefs = context.getSharedPreferences(AsyncConstant.Constants.PREFERENCE, Context.MODE_PRIVATE);
             instance = new Async();
+
         }
         return instance;
+    }
+
+    public static Async getInstance(Context context, boolean overrideSentry) {
+        if (instance == null) {
+            sharedPrefs = context.getSharedPreferences(AsyncConstant.Constants.PREFERENCE, Context.MODE_PRIVATE);
+            instance = new Async();
+
+            if (overrideSentry) {
+                setupSentry(context);
+            }
+
+        }
+        return instance;
+    }
+
+    private static void setupSentry(Context context) {
+
+        overrideSentry = true;
+
+        SentryAndroid.init(context.getApplicationContext(),
+                options -> {
+                    options.setDsn(context.getApplicationContext().getString(R.string.async_sentry_dsn));
+                    options.setCacheDirPath(context.getCacheDir().getAbsolutePath());
+                    options.setSentryClientName("PodAsync-Android");
+                    options.addInAppInclude("com.fanap.podasync");
+                    options.setEnvironment("PODASYNC");
+                });
+
+
     }
 
 
@@ -116,7 +161,7 @@ public class Async {
             public void onStateChanged(WebSocket websocket, WebSocketState newState) throws Exception {
                 asyncListenerManager.callOnStateChanged(newState.toString());
                 setState(newState.toString());
-                if (log) Log.d(TAG, "State" + " Is Now " + newState.toString());
+                showRawInfoLog("State" + " Is Now " + newState.toString());
                 switch (newState) {
                     case OPEN:
                         reconnectHandler.removeCallbacksAndMessages(null);
@@ -127,7 +172,7 @@ public class Async {
                         if (reconnectOnClose) {
                             retryReconnect();
                         } else {
-                            if (log) Log.e(TAG, "Socket Closed!");
+                            showErrorLog("Socket Closed!");
                         }
                         break;
                     case CONNECTING:
@@ -146,8 +191,7 @@ public class Async {
 
             @Override
             public void onConnectError(WebSocket websocket, WebSocketException cause) throws Exception {
-                if (log) Log.e("onConnected", cause.toString());
-
+                captureError("Connect Error", cause);
             }
 
 
@@ -161,7 +205,7 @@ public class Async {
              */
             @Override
             public void onDisconnected(WebSocket websocket, WebSocketFrame serverCloseFrame, WebSocketFrame clientCloseFrame, boolean closedByServer) throws Exception {
-                if (log) Log.e("Disconnected", serverCloseFrame.getCloseReason());
+                captureError("On Disconnected", serverCloseFrame.getCloseReason());
                 asyncListenerManager.callOnDisconnected(serverCloseFrame.getCloseReason());
             }
 
@@ -187,8 +231,7 @@ public class Async {
 
             @Override
             public void onCloseFrame(WebSocket websocket, WebSocketFrame frame) throws Exception {
-                showLog("onCloseFrame");
-                showLog(frame.getCloseReason());
+                captureMessage("On Close Frame", frame.getCloseReason());
             }
 
             @Override
@@ -207,7 +250,7 @@ public class Async {
              */
             @Override
             public void onTextMessage(WebSocket websocket, String textMessage) throws Exception {
-                if (rawLog) Log.d(TAG, textMessage);
+                captureMessage("On Text Message", textMessage);
                 int type = 0;
                 lastReceiveMessageTime = new Date().getTime();
 
@@ -229,10 +272,8 @@ public class Async {
                         handleOnErrorMessage(clientMessage);
                         break;
                     case AsyncMessageType.MessageType.MESSAGE_ACK_NEEDED:
-
-                        handleOnMessageAckNeeded(websocket, clientMessage);
-                        break;
                     case AsyncMessageType.MessageType.MESSAGE_SENDER_ACK_NEEDED:
+
                         handleOnMessageAckNeeded(websocket, clientMessage);
                         break;
                     case AsyncMessageType.MessageType.MESSAGE:
@@ -291,8 +332,7 @@ public class Async {
 
             @Override
             public void onError(WebSocket websocket, WebSocketException cause) throws Exception {
-                if (log) Log.e(TAG, "onError");
-                if (log) Log.e(TAG, cause.getCause().getMessage());
+                captureError("On WebSocket Error", cause);
                 asyncListenerManager.callOnError(cause.toString());
             }
 
@@ -310,7 +350,7 @@ public class Async {
 
             @Override
             public void onMessageError(WebSocket websocket, WebSocketException cause, List<WebSocketFrame> frames) throws Exception {
-                if (log) Log.e("onMessageError", cause.toString());
+                captureError("On Message Error", cause);
             }
 
             @Override
@@ -345,6 +385,85 @@ public class Async {
         });
     }
 
+    private void captureMessage(String message) {
+
+
+        Breadcrumb c = new Breadcrumb();
+        c.setCategory("INFO");
+        c.setData("DATA", message);
+        c.setLevel(SentryLevel.INFO);
+        c.setMessage(message);
+        c.setType("INFO LOG");
+        if (Sentry.isEnabled())
+            Sentry.addBreadcrumb(c, "NORMAL_INFO_WITHOUT_DATA");
+
+        showLog(message);
+    }
+
+    private void captureMessage(String info, String data) {
+
+
+        Breadcrumb c = new Breadcrumb();
+        c.setCategory("INFO");
+        c.setData("DATA", data);
+        c.setLevel(SentryLevel.INFO);
+        c.setMessage(info);
+        c.setType("DATA LOG");
+        if (Sentry.isEnabled())
+        Sentry.addBreadcrumb(c, "NORMAL_INFO");
+
+
+        showLog(info);
+        showRawInfoLog(data);
+    }
+
+
+    private void captureError(String hint, Exception cause) {
+
+
+        SentryEvent event = new SentryEvent(cause);
+        event.setEnvironment("PODASYNC");
+        event.setLevel(SentryLevel.ERROR);
+        event.setTag("FROM_SDK", "PODASYNC");
+        event.setExtra("FROM_SDK", "PODASYNC");
+        if (Sentry.isEnabled())
+        Sentry.captureEvent(event, hint);
+
+        showErrorLog(hint);
+        showErrorLog(cause.getMessage());
+
+    }
+
+    private void captureError(String hint, String cause) {
+
+        SentryEvent event = new SentryEvent(new Exception(cause));
+        event.setEnvironment("PODASYNC");
+        event.setLevel(SentryLevel.ERROR);
+        event.setTag("FROM_SDK", "PODASYNC");
+        event.setExtra("FROM_SDK", "PODASYNC");
+        if (Sentry.isEnabled())
+        Sentry.captureEvent(event, hint);
+
+
+        showErrorLog(hint);
+        showErrorLog(cause);
+
+
+    }
+
+    private void showErrorLog(String cause) {
+        if (log) Log.e(TAG, cause);
+    }
+
+    private void showRawInfoLog(String info) {
+        if (rawLog) Log.d(TAG, info);
+    }
+
+    private void showLog(String info) {
+        if (log) Log.i(TAG, info);
+    }
+
+
     /*
      * Its showed
      * */
@@ -362,7 +481,8 @@ public class Async {
                     asyncListenerManager.callOnError(e.getMessage());
                 }
                 if (log)
-                    Log.e(TAG, "Async: reConnect in " + " retryStep " + retryStep + " s ");
+                    captureMessage("Retry Connect", "Async: reConnect in " + " retryStep " + retryStep + " s ");
+
             }
         }, retryStep * 1000);
         if (retryStep < 60) retryStep *= 2;
@@ -376,6 +496,8 @@ public class Async {
                         String token, String ssoHost, String deviceID) {
 
         try {
+
+
             WebSocketFactory webSocketFactory = new WebSocketFactory();
             SSLSocketFactory.getDefault();
             setAppId(appId);
@@ -391,15 +513,22 @@ public class Async {
             webSocket = webSocketFactory
                     .createSocket(socketServerAddress);
 
-            Socket socket = webSocket.getSocket();
+            fillInitialSentry(socketServerAddress, appId, serverName, token, ssoHost, deviceID);
 
-            Log.d(TAG, "Enabling SNI for " + sName);
 
-            try {
-                Method method = socket.getClass().getMethod("setHostname", String.class);
-                method.invoke(socket, sName);
-            } catch (Exception e) {
-                Log.w(TAG, "SNI Failed", e);
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+
+                Socket socket = webSocket.getSocket();
+
+                showRawInfoLog("Enabling SNI for " + sName);
+
+                try {
+                    Method method = socket.getClass().getMethod("setHostname", String.class);
+                    method.invoke(socket, sName);
+                } catch (Exception e) {
+                    captureError("Set SNI", e);
+                }
+
             }
 
 
@@ -414,10 +543,21 @@ public class Async {
             }
 
         } catch (IOException e) {
-            if (log) Log.e("Async: connect", e.getMessage());
+            captureError("IOConnect", e);
         } catch (Exception e) {
-            if (log) Log.e(TAG, e.getCause().getMessage());
+            captureError("Connect", e);
+        }
+    }
 
+    private void fillInitialSentry(String socketServerAddress, String appId, String serverName, String token, String ssoHost, String deviceID) {
+
+        if (Sentry.isEnabled()) {
+            Sentry.setExtra("appId", appId);
+            Sentry.setExtra("socketServerAddress", socketServerAddress);
+            Sentry.setExtra("serverName", serverName);
+            Sentry.setExtra("token", token);
+            Sentry.setExtra("ssoHost", ssoHost);
+            Sentry.setExtra("deviceID", deviceID);
         }
     }
 
@@ -437,7 +577,7 @@ public class Async {
             sendData(webSocket, wrapperJsonString);
         } catch (Exception e) {
             asyncListenerManager.callOnError(e.getCause().getMessage());
-            if (log) Log.e("Async: connect", e.getCause().getMessage());
+            captureError("Send Message", e);
         }
     }
 
@@ -461,20 +601,23 @@ public class Async {
 
             String json1 = gson.toJson(messageWrapperVo);
             sendData(webSocket, json1);
-            showLog("Send message");
 
         } catch (Exception e) {
             asyncListenerManager.callOnError(e.getCause().getMessage());
-            if (log) Log.e("Async: connect", e.getCause().getMessage());
+            captureError("Send Message", e);
         }
 
     }
 
+
     public void closeSocket() {
+        captureMessage("Send Close Socket");
         webSocket.sendClose();
+
     }
 
     public void logOut() {
+        captureMessage("Request log out");
         removePeerId(AsyncConstant.Constants.PEER_ID, null);
         isServerRegister = false;
         isDeviceRegister = false;
@@ -541,17 +684,18 @@ public class Async {
         try {
             isDeviceRegister = true;
             String newPeerId = clientMessage.getContent();
+            addSentryExtra("PEER_ID", clientMessage.getContent());
             if (!peerIdExistence()) {
                 savePeerId(newPeerId);
-                showLog("Peer id doesn't exist");
+                captureMessage("Peer id doesn't exist");
 
             }
 
             if (newPeerId.equals(peerId)) {
 
-                showLog("PEER ids are equal");
-                showLog("SERVER_ALREADY_REGISTERED");
-                showLog("ASYNC_IS_READY");
+                captureMessage("PEER ids are equal");
+                captureMessage("SERVER_ALREADY_REGISTERED");
+                captureMessage("ASYNC_IS_READY");
 
                 callAsyncReady();
 
@@ -560,7 +704,7 @@ public class Async {
                 serverRegister(websocket);
             }
         } catch (Exception e) {
-            if (log) Log.e(TAG, e.getCause().getMessage());
+            captureError("Handle On Device Register", e);
         }
 
     }
@@ -568,7 +712,7 @@ public class Async {
     private void serverRegister(WebSocket websocket) {
         if (websocket != null) {
             try {
-                showLog("SEND_SERVER_REGISTER");
+                captureMessage("SEND_SERVER_REGISTER");
                 RegistrationRequest registrationRequest = new RegistrationRequest();
                 registrationRequest.setName(getServerName());
 
@@ -576,10 +720,10 @@ public class Async {
                 String jsonMessageWrapperVo = getMessageWrapper(jsonRegistrationRequestVo, AsyncMessageType.MessageType.SERVER_REGISTER);
                 sendData(websocket, jsonMessageWrapperVo);
             } catch (Exception e) {
-                if (log) Log.e(TAG, e.getCause().getMessage());
+                captureError("SEND_SERVER_REGISTER", e);
             }
         } else {
-            if (log) Log.e(TAG, "WebSocket Is Null");
+            captureError("SEND_SERVER_REGISTER", "WebSocket Is Null");
         }
     }
 
@@ -591,26 +735,29 @@ public class Async {
                 if (getState().equals("OPEN")) {
                     if (websocket != null) {
                         websocket.sendText(jsonMessageWrapperVo);
+                        captureMessage("SEND DATA", jsonMessageWrapperVo);
                     } else {
-                        if (log) Log.e(TAG, "webSocket instance is Null");
+                        captureError("SEND DATA", "webSocket instance is Null");
                     }
                 } else {
                     asyncListenerManager.callOnError("Socket is close");
                     asyncQueue.add(jsonMessageWrapperVo);
+                    captureError("SEND DATA", "Socket is close");
+                    captureMessage("Add to queue", jsonMessageWrapperVo);
                 }
 
             } else {
-                if (log) Log.e(TAG, "message is Null");
+                captureError("SEND DATA", "message is Null");
             }
             ping();
         } catch (Exception e) {
-            if (log) Log.e("Async: connect", e.getCause().getMessage());
+            captureError("SEND DATA", e);
         }
 
     }
 
     private void handleOnErrorMessage(ClientMessage clientMessage) {
-        if (log) Log.e(TAG + "OnErrorMessage", clientMessage.getContent());
+        captureError("Handle On Error", clientMessage.getContent());
         setErrorMessage(clientMessage.getContent());
     }
 
@@ -620,10 +767,10 @@ public class Async {
                 setMessage(clientMessage.getContent());
                 asyncListenerManager.callOnTextMessage(clientMessage.getContent());
             } catch (Exception e) {
-                if (log) Log.e(TAG, e.getCause().getMessage());
+                captureError("Handle On Message", e);
             }
         } else {
-            if (log) Log.e(TAG, " clientMessage Is Null");
+            captureError("Handle On Message", "ClientMessage Is Null");
         }
     }
 
@@ -631,16 +778,20 @@ public class Async {
         try {
             if (clientMessage.getContent() != null) {
                 if (getDeviceId() == null || getDeviceId().isEmpty()) {
-//                    saveDeviceId(clientMessage.getContent());
+                    addSentryExtra("DEVICE_ID", clientMessage.getContent());
                     setDeviceID(clientMessage.getContent());
                 }
                 deviceRegister(webSocket);
             } else {
-                showLog("ASYNC_PING_RECEIVED");
+                captureMessage("ASYNC_PING_RECEIVED");
             }
         } catch (Exception e) {
-            if (log) Log.e(TAG, e.getCause().getMessage());
+            captureError("Handle On Ping", e);
         }
+    }
+
+    private void addSentryExtra(String key, String value) {
+        Sentry.setExtra(key, value);
     }
 
     /*
@@ -648,19 +799,20 @@ public class Async {
      * */
     private void handleOnServerRegister(String textMessage) {
         try {
-            showLog("SERVER_REGISTERED");
-            showLog("ASYNC_IS_READY");
-            showLog(textMessage);
+            captureMessage("SERVER_REGISTERED");
+            captureMessage("ASYNC_IS_READY");
+            captureMessage(textMessage);
 
             callAsyncReady();
         } catch (Exception e) {
-            if (log) Log.e(TAG, e.getCause().getMessage());
+            captureError("Handle On Server Register", e);
         }
     }
 
     private void callAsyncReady() {
         isServerRegister = true;
         asyncListenerManager.callOnStateChanged("ASYNC_READY");
+        captureMessage("Check async queue with size: " + asyncQueue.size());
         for (String message : asyncQueue) {
             sendData(webSocket, message);
         }
@@ -684,10 +836,10 @@ public class Async {
                 String jsonSenderAckNeededWrapper = getMessageWrapper(jsonSenderAckNeeded, AsyncMessageType.MessageType.ACK);
                 sendData(websocket, jsonSenderAckNeededWrapper);
             } else {
-                if (log) Log.e(TAG, "WebSocket Is Null ");
+                captureError("Handle On Message need ACK", "WebSocket Is Null ");
             }
         } catch (Exception e) {
-            if (log) Log.e(TAG, e.getCause().getMessage());
+            captureError("Handle On Message need ACK", e);
         }
     }
 
@@ -707,15 +859,14 @@ public class Async {
                 String peerMessageJson = gson.toJson(peerInfo);
                 String jsonPeerInfoWrapper = getMessageWrapper(peerMessageJson, AsyncMessageType.MessageType.DEVICE_REGISTER);
                 sendData(websocket, jsonPeerInfoWrapper);
-                showLog("SEND_DEVICE_REGISTER");
-                if (log) Log.d(TAG, jsonPeerInfoWrapper);
+                captureMessage("SEND_DEVICE_REGISTER", jsonPeerInfoWrapper);
 
             } else {
-                if (log) Log.e(TAG, "WebSocket Is Null ");
+                captureError("SEND_DEVICE_REGISTER", "WebSocket Is Null ");
             }
 
         } catch (Exception e) {
-            if (log) Log.e(TAG, e.getCause().getMessage());
+            captureError("SEND_DEVICE_REGISTER", e);
         }
     }
 
@@ -759,11 +910,11 @@ public class Async {
                         try {
                             sendData(webSocket, message);
                         } catch (Exception e) {
-                            if (log) Log.e(TAG, e.getMessage());
+                            captureError("SEND PING", e);
                         }
-                        showLog("SEND_ASYNC_PING");
+                        captureMessage("SEND_ASYNC_PING", message);
                     } else {
-                        if (log) Log.e(TAG + "Socket Is", "Closed");
+                        captureError("SEND PING", "SOCKET IS CLOSED");
                     }
                 }
             }
@@ -849,10 +1000,10 @@ public class Async {
                 webSocket.disconnect();
                 webSocket = null;
                 pingHandler.removeCallbacksAndMessages(null);
-                showLog("Socket Stopped");
+                captureMessage("Socket Stopped");
             }
         } catch (Exception e) {
-            if (log) Log.e(TAG, e.getMessage());
+            captureError("STOP SOCKET", e);
         }
     }
 
@@ -871,16 +1022,13 @@ public class Async {
      * Save peerId in the SharedPreferences
      */
     private void savePeerId(String peerId) {
-        showLog("Saving new peer id: " + peerId);
+        captureMessage("Saving new peer id: " + peerId);
 
         SharedPreferences.Editor editor = sharedPrefs.edit();
         editor.putString(AsyncConstant.Constants.PEER_ID, peerId);
         editor.apply();
     }
 
-    private void showLog(String message) {
-        if (log) Log.i(Async.TAG, message);
-    }
 
     //Save deviceId in the SharedPreferences
     private static void saveDeviceId(String deviceId) {

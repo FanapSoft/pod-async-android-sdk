@@ -86,8 +86,8 @@ public class AsyncActivity extends AppCompatActivity implements SocketContract.v
         connectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                socketPresenter.connect(getString(R.string.socketAddress), getString(R.string.appId), getString(R.string.serverName),
-                        "", getString(R.string.ssoHost), "");
+                socketPresenter.connect(getString(R.string.sandbox_socketAddress), getString(R.string.sandbox_appId), getString(R.string.sandbox_serverName),
+                        "", getString(R.string.sandbox_ssoHost), "");
             }
         });
 

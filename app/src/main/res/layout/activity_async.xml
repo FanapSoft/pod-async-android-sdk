@@ -75,9 +75,10 @@
         android:id="@+id/textViewPeerId"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="57dp"
         android:layout_marginStart="58dp"
+        android:layout_marginEnd="57dp"
         app:layout_constraintEnd_toEndOf="@+id/textViewShowMessage"
+        app:layout_constraintHorizontal_bias="0.538"
         app:layout_constraintStart_toStartOf="@+id/buttonclosesocket"
         app:layout_constraintTop_toBottomOf="@+id/textViewstate"
         tools:text="25054" />
