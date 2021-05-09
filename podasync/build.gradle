@@ -5,7 +5,7 @@ apply plugin: 'com.github.dcendents.android-maven'
 
 ext{
 
-    libraryVersion = '0.2.13.5'
+    libraryVersion = '0.2.13.8'
 }
 
 android {
@@ -13,7 +13,7 @@ android {
     defaultConfig {
         minSdkVersion 17
         targetSdkVersion 28
-        versionCode 24
+        versionCode 27
         versionName libraryVersion
 
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
@@ -57,7 +57,7 @@ dependencies {
     implementation 'com.android.support:support-annotations:28.0.0'
 
     //Web Socket
-    implementation 'com.neovisionaries:nv-websocket-client:2.10'
+    implementation 'com.neovisionaries:nv-websocket-client:2.8'
 
     //log
     implementation 'io.sentry:sentry-android:2.0.0'
@@ -124,6 +124,23 @@ task javadocJar(type: Jar, dependsOn: javadoc) {
     classifier = 'javadoc'
     from javadoc.destinationDir
 }
+
+task publishPodAsyncSDK {
+
+    doFirst {
+        println 'start publishing'
+    }
+    doLast {
+        println 'Published successfully!'
+    }
+    dependsOn 'clean'
+    dependsOn 'install'
+    dependsOn 'bintrayUpload'
+    tasks.findByName('install').mustRunAfter('clean')
+    tasks.findByName('bintrayUpload').mustRunAfter('install')
+
+}
+
 
 artifacts {
     archives javadocJar

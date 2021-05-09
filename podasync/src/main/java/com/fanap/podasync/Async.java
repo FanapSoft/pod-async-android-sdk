@@ -34,22 +34,17 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLSocketFactory;
 
 import io.sentry.android.core.SentryAndroid;
-import io.sentry.android.core.SentryAndroidOptions;
 import io.sentry.core.Breadcrumb;
-import io.sentry.core.EventProcessor;
-import io.sentry.core.Hub;
-import io.sentry.core.Scope;
-import io.sentry.core.ScopeCallback;
 import io.sentry.core.Sentry;
-import io.sentry.core.SentryClient;
 import io.sentry.core.SentryEvent;
 import io.sentry.core.SentryLevel;
-import io.sentry.core.SentryOptions;
-import io.sentry.core.protocol.SentryId;
 
 /*
  * By default WebSocketFactory uses for non-secure WebSocket connections (ws:)
@@ -410,7 +405,7 @@ public class Async {
         c.setMessage(info);
         c.setType("DATA LOG");
         if (Sentry.isEnabled())
-        Sentry.addBreadcrumb(c, "NORMAL_INFO");
+            Sentry.addBreadcrumb(c, "NORMAL_INFO");
 
 
         showLog(info);
@@ -427,7 +422,7 @@ public class Async {
         event.setTag("FROM_SDK", "PODASYNC");
         event.setExtra("FROM_SDK", "PODASYNC");
         if (Sentry.isEnabled())
-        Sentry.captureEvent(event, hint);
+            Sentry.captureEvent(event, hint);
 
         showErrorLog(hint);
         showErrorLog(cause.getMessage());
@@ -442,7 +437,7 @@ public class Async {
         event.setTag("FROM_SDK", "PODASYNC");
         event.setExtra("FROM_SDK", "PODASYNC");
         if (Sentry.isEnabled())
-        Sentry.captureEvent(event, hint);
+            Sentry.captureEvent(event, hint);
 
 
         showErrorLog(hint);
@@ -516,7 +511,7 @@ public class Async {
             fillInitialSentry(socketServerAddress, appId, serverName, token, ssoHost, deviceID);
 
 
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
 
                 Socket socket = webSocket.getSocket();
 
@@ -528,9 +523,54 @@ public class Async {
                 } catch (Exception e) {
                     captureError("Set SNI", e);
                 }
-
             }
 
+
+            onEvent(webSocket);
+
+            webSocket.setMaxPayloadSize(100);
+            webSocket.addExtension(WebSocketExtension.PERMESSAGE_DEFLATE);
+            webSocket.connectAsynchronously();
+
+            if (deviceID != null && !deviceID.isEmpty()) {
+                setDeviceID(deviceID);
+            }
+
+        } catch (IOException e) {
+            captureError("IOConnect", e);
+        } catch (Exception e) {
+            captureError("Connect", e);
+        }
+    }
+
+
+    public void connect() {
+
+        try {
+
+            WebSocketFactory webSocketFactory = new WebSocketFactory();
+
+            String sName = Uri.parse(serverAddress).getHost();
+
+            webSocketFactory.setServerName(sName);
+
+            webSocket = webSocketFactory
+                    .createSocket(serverAddress);
+
+
+            Socket socket = webSocket.getSocket();
+
+            showRawInfoLog("Enabling SNI for " + sName);
+
+            try {
+                Method method = null;
+                if (socket != null) {
+                    method = socket.getClass().getMethod("setHostname", String.class);
+                    method.invoke(socket, sName);
+                }
+            } catch (Exception e) {
+                captureError("Set SNI", e);
+            }
 
             onEvent(webSocket);
 
@@ -741,7 +781,7 @@ public class Async {
                     }
                 } else {
                     asyncListenerManager.callOnError("Socket is close");
-                    asyncQueue.add(jsonMessageWrapperVo);
+                    queueMessages(jsonMessageWrapperVo);
                     captureError("SEND DATA", "Socket is close");
                     captureMessage("Add to queue", jsonMessageWrapperVo);
                 }
@@ -754,6 +794,68 @@ public class Async {
             captureError("SEND DATA", e);
         }
 
+    }
+
+    //TODO
+    private void sendData(String jsonMessageWrapperVo) {
+
+        try {
+            lastSentMessageTime = new Date().getTime();
+            if (jsonMessageWrapperVo != null) {
+                if (getState().equals("OPEN")) {
+                    if (webSocket != null) {
+                        webSocket.sendText(jsonMessageWrapperVo);
+                        captureMessage("SEND DATA", jsonMessageWrapperVo);
+                    } else {
+                        captureError("SEND DATA", "webSocket instance is Null");
+                    }
+                } else {
+                    asyncListenerManager.callOnError("Socket is close");
+                    queueMessages(jsonMessageWrapperVo);
+                    captureError("SEND DATA", "Socket is close");
+                    captureMessage("Add to queue", jsonMessageWrapperVo);
+                }
+
+            } else {
+                captureError("SEND DATA", "message is Null");
+            }
+            ping();
+        } catch (Exception e) {
+            captureError("SEND DATA", e);
+        }
+
+    }
+
+    private void sendDataWithoutQueue(String jsonMessageWrapperVo) {
+
+        try {
+            lastSentMessageTime = new Date().getTime();
+            if (jsonMessageWrapperVo != null) {
+                if (getState().equals("OPEN")) {
+                    if (webSocket != null) {
+                        webSocket.sendText(jsonMessageWrapperVo);
+                        captureMessage("SEND DATA", jsonMessageWrapperVo);
+                    } else {
+                        captureError("SEND DATA", "webSocket instance is Null");
+                    }
+                } else {
+                    asyncListenerManager.callOnError("Socket is close");
+                    captureError("SEND DATA", "Socket is close");
+                    captureMessage("Add to queue", jsonMessageWrapperVo);
+                }
+
+            } else {
+                captureError("SEND DATA", "message is Null");
+            }
+            ping();
+        } catch (Exception e) {
+            captureError("SEND DATA", e);
+        }
+
+    }
+
+    private void queueMessages(String jsonMessageWrapperVo) {
+        asyncQueue.add(jsonMessageWrapperVo);
     }
 
     private void handleOnErrorMessage(ClientMessage clientMessage) {
@@ -812,9 +914,20 @@ public class Async {
     private void callAsyncReady() {
         isServerRegister = true;
         asyncListenerManager.callOnStateChanged("ASYNC_READY");
+        dequeueMessages();
+    }
+
+    private void dequeueMessages() {
+        //todo send with delay and clear list
         captureMessage("Check async queue with size: " + asyncQueue.size());
         for (String message : asyncQueue) {
             sendData(webSocket, message);
+        }
+    }
+
+    private void enableServerName() {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
+            connect();
         }
     }
 
@@ -886,6 +999,26 @@ public class Async {
      */
     private void reConnect() throws WebSocketException {
         connect(getServerAddress(), getAppId(), getServerName(), getToken(), getSsoHost(), null);
+    }
+
+    private void scheduleRec() throws WebSocketException {
+
+         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+          scheduler.scheduleAtFixedRate(() -> {
+
+//                if (!state.isNetworkAvailable()) {
+//                    return;
+//                }
+
+              if (!"OPEN".equals(getState())) try {
+                  webSocket = webSocket.recreate();
+                  webSocket.connect();
+              } catch (Exception e) {
+
+              }
+          }, 0, 5, TimeUnit.SECONDS);
+
     }
 
     /**
